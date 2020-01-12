@@ -25,7 +25,6 @@ dependencies:
   gcloud: ^0.6.3
   googleapis_auth: ^0.2.11+1
   permission_handler: ^4.1.0
-  speech_recognition: ^0.3.0+1
   speech_to_text: ^0.7.2
   youtube_player: ^3.5.0
 

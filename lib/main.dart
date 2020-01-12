@@ -43,7 +43,8 @@ class _MyHomePageState extends State<MyHomePage> {
   String _transcription = '';
   VideoPlayerController _videoController;
   // String _source = "8Yx3klr2bXk";
-  String _source = "s59UjW8ZcRY";
+  // String _source = "s59UjW8ZcRY";
+  String _source = "hUIFgd8wBBA";
 
   @override
   void initState() {
@@ -61,12 +62,11 @@ class _MyHomePageState extends State<MyHomePage> {
       if (cmd.id.contains('stop') || cmd.id.contains('pause')) {
         info('Video Paused');
         _videoController.pause();
-      } else if (cmd.id.contains('play') ||
-          cmd.id.contains('start') ||
-          cmd.id.contains('go')) {
+      } else if (cmd.id.contains('play') || cmd.id.contains('start')) {
         info('Video Started');
         _videoController.play();
-      } else if (cmd.id.contains('go backwards 10 seconds')) {
+      } else if (cmd.id.toLowerCase().contains('go backwards 5 second') ||
+          cmd.id.toLowerCase().contains('go backward 5 second')) {
         info('Backward 5s');
         seek(Duration(seconds: -5));
       } else if (cmd.id.contains('forward')) {
