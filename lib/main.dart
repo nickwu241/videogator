@@ -1,111 +1,276 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-void main() => runApp(MyApp());
+import 'package:flushbar/flushbar.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+// import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:youtube_player/youtube_player.dart';
+
+import 'commands.dart';
+import 'permissions.dart';
+
+void main() {
+  runApp(MyApp());
+  SystemChrome.setEnabledSystemUIOverlays([]);
+}
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      debugShowCheckedModeBanner: false,
+      title: 'Videogator',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  final cc = CommandController();
+  SpeechToText _speech = SpeechToText();
+  // FlutterTts _tts = FlutterTts();
+  bool _isListening = false;
+  String _transcription = '';
+  VideoPlayerController _videoController;
+  // String _source = "8Yx3klr2bXk";
+  String _source = "s59UjW8ZcRY";
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    askForPermissions();
+    _speech.initialize(onStatus: (status) {
+      print('[Speech Status]: $status');
+    }, onError: (error) {
+      print('[Speech Error]: ${error.toString()}');
+    });
+
+    cc.stream.listen((cmd) {
+      if (cmd.id.isEmpty) {
+        return;
+      }
+      if (cmd.id.contains('stop') || cmd.id.contains('pause')) {
+        info('Video Paused');
+        _videoController.pause();
+      } else if (cmd.id.contains('play') ||
+          cmd.id.contains('start') ||
+          cmd.id.contains('go')) {
+        info('Video Started');
+        _videoController.play();
+      } else if (cmd.id.contains('go backwards 10 seconds')) {
+        info('Backward 5s');
+        seek(Duration(seconds: -5));
+      } else if (cmd.id.contains('forward')) {
+        info('Forward 10s');
+        forward();
+      } else if (cmd.id.contains('back')) {
+        info('Backward 10s');
+        back();
+      } else {
+        error('Unrecognized Command', cmd.id);
+      }
+    });
+    super.initState();
+  }
+
+  void info(String message) {
+    Flushbar(
+      message: message,
+      icon: Icon(
+        Icons.info_outline,
+        size: 28.0,
+        color: Colors.blue[300],
+      ),
+      leftBarIndicatorColor: Colors.blue[300],
+      // flushbarPosition: FlushbarPosition.TOP,
+      duration: Duration(seconds: 2),
+      animationDuration: Duration(seconds: 0),
+      margin: EdgeInsets.fromLTRB(8, 8, 8, 60),
+      borderRadius: 8,
+    ).show(context);
+    // _tts.speak('$title. $message');
+    // FlushbarHelper.createInformation(
+    //   title: title,
+    //   message: message,
+    // ).show(context);
+  }
+
+  void error(String title, String message) {
+    Flushbar(
+      title: title,
+      message: message,
+      icon: Icon(
+        Icons.warning,
+        size: 28.0,
+        color: Colors.red[300],
+      ),
+      leftBarIndicatorColor: Colors.red[300],
+      // flushbarPosition: FlushbarPosition.TOP,
+      duration: Duration(seconds: 2),
+      animationDuration: Duration(seconds: 0),
+      margin: EdgeInsets.fromLTRB(8, 8, 8, 60),
+      borderRadius: 8,
+    ).show(context);
+    // _tts.speak('$title. $message');
+    // FlushbarHelper.createError(
+    //   title: title,
+    //   message: message,
+    // ).show(context);
+  }
+
+  void seek(Duration timeDelta) {
+    print('[seek delta] ' + timeDelta.inSeconds.toString());
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _videoController.seekTo(_videoController.value.position + timeDelta);
+    });
+  }
+
+  void onResultHandler(SpeechRecognitionResult result) {
+    setState(() {
+      _transcription = result.recognizedWords;
+      if (result.finalResult) {
+        _isListening = false;
+        cc.sink.add(transformToCommand(_transcription));
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: SafeArea(
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
+            Stack(
+              alignment: Alignment.bottomCenter,
+              children: <Widget>[
+                Container(
+                  height: MediaQuery.of(context).size.height - 50,
+                  child: YoutubePlayer(
+                    context: context,
+                    source: _source,
+                    quality: YoutubeQuality.HD,
+                    // aspectRatio: 16 / 9,
+                    autoPlay: false,
+                    // loop: false,
+                    reactToOrientationChange: false,
+                    startFullScreen: false,
+                    controlsActiveBackgroundOverlay: true,
+                    controlsTimeOut: Duration(seconds: 2),
+                    playerMode: YoutubePlayerMode.DEFAULT,
+                    callbackController: (controller) {
+                      _videoController = controller;
+                    },
+                    onError: (error) {
+                      print(error);
+                    },
+                  ),
+                ),
+              ],
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.display1,
+            // Row(
+            //   children: [
+            //     IconButton(
+            //       icon: Icon(Icons.arrow_back),
+            //       onPressed: () => back(),
+            //     ),
+            //     IconButton(
+            //       icon: Icon(Icons.arrow_forward),
+            //       onPressed: () => forward(),
+            //     )
+            //   ],
+            // ),
+            Row(
+              // crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
+                  child: SizedBox(
+                    height: 20.0,
+                    width: 30.0,
+                    child: SpinKitWave(
+                      color: _isListening ? Colors.red : Colors.transparent,
+                      size: 20.0,
+                    ),
+                  ),
+                ),
+                Text(_transcription),
+                Spacer(),
+                FloatingActionButton(
+                  mini: true,
+                  child: Icon(Icons.search),
+                  onPressed: () => _displayDialog(context),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 20.0),
+                  child: FloatingActionButton(
+                    mini: true,
+                    backgroundColor: _isListening ? Colors.red : Colors.blue,
+                    child: Icon(_isListening ? Icons.cancel : Icons.mic),
+                    onPressed: () {
+                      if (!_isListening) {
+                        _speech.listen(onResult: onResultHandler);
+                      }
+                      setState(() {
+                        _isListening = !_isListening;
+                      });
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
+
+  TextEditingController _textFieldController = TextEditingController();
+
+  _displayDialog(BuildContext context) async {
+    return showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            content: TextField(
+              controller: _textFieldController,
+              decoration: InputDecoration(hintText: "Youtube Video / URL"),
+            ),
+            actions: <Widget>[
+              FlatButton(
+                child: Text('OK'),
+                onPressed: () {
+                  print('OK');
+                  setState(() {
+                    _source = _textFieldController.text;
+                    _textFieldController.clear();
+                  });
+                  Navigator.of(context).pop();
+                },
+              ),
+              FlatButton(
+                child: Text('CANCEL'),
+                onPressed: () {
+                  print('CANCEL');
+                  Navigator.of(context).pop();
+                },
+              )
+            ],
+          );
+        });
+  }
+
+  void forward() => seek(Duration(seconds: 10));
+
+  void back() => seek(Duration(seconds: -10));
 }
